@@ -1,0 +1,11 @@
+openai>=1.40
+python-dotenv>=1.0
+rich>=13.7
+langgraph>=0.2
+gradio>=4.44
+# Lab 3 · topologies — a persistent store so several agents can read the same
+# corpus without each re-embedding it, plus a local embedding model (no API key,
+# no per-token cost).
+chromadb>=1.0
+sentence-transformers>=3.0
+pypdf>=4.0
