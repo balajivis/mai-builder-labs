@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Lab 1b — MEMORY: what the agent carries between turns
+"""Lab 1c — MEMORY: what the agent carries between turns
 
 Modern AI Pro · Level 3 · AI Builder · Day 1
 
@@ -13,8 +13,8 @@ is a policy you chose, and each policy pays a different bill:
 
 There is no right answer on this slider. There is only which bill you meant to pay.
 
-    python labs/lab_1b_memory.py           guided walkthrough in the terminal
-    python labs/lab_1b_memory.py --web     knobs in the browser
+    python labs/lab_1c_memory.py           guided walkthrough in the terminal
+    python labs/lab_1c_memory.py --web     knobs in the browser
 """
 
 from __future__ import annotations
@@ -195,9 +195,9 @@ def stage_policies(cli):
 if __name__ == "__main__":
     cli = client()
     if wants_web():
-        web(cli, port_from(default=7861))
+        web(cli, port_from(default=7862))
         sys.exit(0)
-    banner("Level 3 · AI Builder · Day 1", "Lab 1b · Memory — what it carries")
+    banner("Level 3 · AI Builder · Day 1", "Lab 1c · Memory — what it carries")
     say("[dim]Tip: --web gives you the same thing with a policy dropdown.[/dim]\n")
     stages(cli, [
         Stage("Three policies, one conversation",

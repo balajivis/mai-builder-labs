@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Lab 1c — TOOLS: what the agent can tell apart
+"""Lab 1a — TOOLS: what the agent can tell apart
 
 Modern AI Pro · Level 3 · AI Builder · Day 1
 
@@ -26,8 +26,8 @@ description OVERRIDES a right name.
 
     You may be terse. You may not be wrong.
 
-    python labs/lab_1c_tools.py           guided walkthrough in the terminal
-    python labs/lab_1c_tools.py --web     turn the knobs yourself
+    python labs/lab_1a_tools.py           guided walkthrough in the terminal
+    python labs/lab_1a_tools.py --web     turn the knobs yourself
 """
 
 from __future__ import annotations
@@ -178,9 +178,9 @@ def stage_misleading(cli):
 if __name__ == "__main__":
     cli = client()
     if wants_web():
-        web(cli, port_from(default=7862))
+        web(cli, port_from(default=7860))
         sys.exit(0)
-    banner("Level 3 · AI Builder · Day 1", "Lab 1c · Tools — what it can tell apart")
+    banner("Level 3 · AI Builder · Day 1", "Lab 1a · Tools — what it can tell apart")
     say("[dim]Tip: --web lets you turn both knobs and edit descriptions live.[/dim]\n")
     stages(cli, [
         Stage("Which knob carries the routing?",

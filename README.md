@@ -21,7 +21,7 @@ Then **mint your personal MAI key** at [study.modernaipro.com/practice](https://
 **Smoke-test** — proves Python, the install and your key in one shot:
 
 ```bash
-python labs/lab_1a_profile.py --web
+python labs/lab_1a_tools.py --web
 ```
 
 That opens a page at `localhost:7860` with the lab's knobs on it. No extra install: the panel is served by Python's own standard library, so there is nothing to `pip install` and nothing to sign in to. Drop `--web` for the same lab as a guided walkthrough in the terminal — both run the same code.
@@ -42,14 +42,18 @@ Run in order; each builds on the last.
 
 An agent is not one thing you prompt. It is four surfaces you choose, and each one changes behaviour without touching the model. Run the one being taught; each takes about three minutes.
 
+Tools come first because they are the thing you **build** — the profile is a knob, and a knob only teaches once there is a machine under it.
+
 | | Surface | Run it | The question it answers |
 |---|---|---|---|
-| **1a** | **Profile** | `python labs/lab_1a_profile.py --web` | Who is it? Same question, same tools — a different paragraph makes a different colleague. **Start here.** |
-| **1b** | **Memory** | `python labs/lab_1b_memory.py --web` | What survives a turn? Turn 3 says "they" and names nobody. Five policies, five different bills. |
-| **1c** | **Tools** | `python labs/lab_1c_tools.py --web` | What can it tell apart? Same four functions, two sets of descriptions, different routing. |
+| **1a** | **Tools** | `python labs/lab_1a_tools.py --web` | What can it tell apart? A 2×2 on names vs descriptions — and the answer is not the one the usual advice implies. **Start here.** |
+| **1b** | **Profile** | `python labs/lab_1b_profile.py --web` | Who is it? The knob on the machine you just built — closing on whether a profile can repair a broken tool layer. It can. |
+| **1c** | **Memory** | `python labs/lab_1c_memory.py --web` | What survives a turn? Turn 3 says "they" and names nobody. Five policies, five different bills. |
 | **1d** | **Planning** | `python labs/lab_1d_planning.py --web` | How does it decide? ReAct vs Plan-and-Execute vs ReWOO, on one frozen scorecard. |
 
 `python labs/lab_1.py` runs all four back to back.
+
+Every claim in these labs was measured against the class model on 2026-09-12 rather than asserted, and three of the four first drafts turned out to teach something the model does not do. The numbers in each file's header are reproducible — you should land on the same table.
 
 Every tool in Lab 1 is **read-only on purpose**. The risk gate, the budget cap and the autonomy ladder are Lab 4 on Sunday, where human-in-the-loop is the subject rather than a sidebar — nothing in Lab 1 should compete with the design lesson.
 

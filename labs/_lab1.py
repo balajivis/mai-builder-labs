@@ -6,12 +6,15 @@ this lab is about the four design surfaces, and nothing in it should be able to
 fire a trade. The risk gate, the budget cap and the autonomy ladder live in
 Lab 4 on Sunday, where human-in-the-loop is the subject rather than a sidebar.
 
-    lab_1a_profile   PROFILE   who it is
-    lab_1b_memory    MEMORY    what it carries between turns
-    lab_1c_tools     TOOLS     what it can tell apart
+    lab_1a_tools     TOOLS     what it can tell apart   ← build it first
+    lab_1b_profile   PROFILE   who it is                — steer what you built
+    lab_1c_memory    MEMORY    what it carries between turns
     lab_1d_planning  PLANNING  how it decides
 
-Each runs on its own:  python labs/lab_1a_profile.py [--web]
+Tools come first on purpose: the profile is a knob, and a knob is only teachable
+once there is a machine under it.
+
+Each runs on its own:  python labs/lab_1a_tools.py [--web]
 """
 
 from __future__ import annotations
@@ -224,6 +227,14 @@ PROFILES = {
         "You are a relationship manager at Aurex Financial. You want to find a way "
         "to say yes. Look up what you need, then propose the closest thing that "
         "would work if the exact request cannot."),
+    # Used by 1b's closing experiment: does the PROFILE repair a broken TOOL layer?
+    # Measured 2026-09-12 (n=2, stable): with MISLEADING descriptions this lifts
+    # routing 5.0/6 → 6.0/6. It does, completely.
+    "strict": (
+        "You are an operations agent at Aurex Financial. Choose tools by what the "
+        "question actually asks for. To test whether ONE amount fits a limit, use "
+        "check_limits. To fetch who a client is, use lookup_client. Do not use a "
+        "profile-fetch tool to answer a yes/no threshold question."),
 }
 
 # ── the task every planner in 1d must answer ─────────────────────────────────
@@ -296,11 +307,17 @@ def react(cli, question: str, *, profile: str, schema=None, budget: int = 6,
     return ""
 
 
-def first_tool(cli, question: str, schema) -> str:
-    """What does it reach for FIRST? One call, no loop — routing is the whole test."""
+def first_tool(cli, question: str, schema, profile: str | None = None) -> str:
+    """What does it reach for FIRST? One call, no loop — routing is the whole test.
+
+    `profile` is a real parameter, not decoration: 1b's combine experiment holds the
+    schema fixed and varies ONLY this. (It was hardcoded to PROFILES['operations']
+    at first, which silently made that whole experiment a no-op — every row came
+    back identical because every row was in fact the same run.)
+    """
     reply = cli.chat.completions.create(
         model="mai", tools=schema,
-        messages=[{"role": "system", "content": PROFILES["operations"]},
+        messages=[{"role": "system", "content": profile or PROFILES["operations"]},
                   {"role": "user", "content": question}])
     meter.add(reply.usage, "routing")
     tc = reply.choices[0].message.tool_calls
