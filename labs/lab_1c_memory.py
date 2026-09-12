@@ -3,8 +3,8 @@
 
 Modern AI Pro · Level 3 · AI Builder · Day 1
 
-Turn 3 asks whether "they" could afford 1,800 units. Nothing in that sentence
-names a client. Whether the agent can answer it is not a model capability — it
+Turn 3 asks what "she" paid. Nothing in that sentence names a customer or an
+order. Whether the agent can answer it is not a model capability — it
 is a policy you chose, and each policy pays a different bill:
 
     none     cheap, and turn 3 is unanswerable
@@ -33,12 +33,12 @@ from _web import (Knob, Panel, answer, note, port_from, section,     # noqa: E40
 
 # Turn 3 must be UNANSWERABLE without turn 1 — otherwise a stateless agent
 # answers it from the question alone and the whole comparison scores a pass.
-# (First draft said "can they settle AXR-7 same-day?", which names the instrument
-#  outright: stateless answered it correctly and the lesson evaporated.)
+# (A first draft named the order outright in turn 3 — the stateless agent then
+#  answered it correctly from the question alone and the lesson evaporated.)
 TURNS = [
-    "I'm looking at client C-1041 today.",
-    "What's their limit?",
-    "Could they afford 1,800 units of AXR-7?",
+    "I'm looking at Priya's complaint — priya@example.com.",
+    "What did she order?",
+    "Is she still inside the refund window for it?",
 ]
 
 POLICIES_HELP = {
@@ -56,7 +56,8 @@ def carry_for(policy: str, cli):
 
     def facts(h):
         for m in h:
-            for cid in re.findall(r"C-\d{4}|[A-Z]{3}-\d", m.get("content") or ""):
+            for cid in re.findall(r"[A-Z]-\d{4}|[\w.+-]+@[\w-]+\.[\w.]+",
+                                  m.get("content") or ""):
                 state.setdefault("seen", [])
                 if cid not in state["seen"]:
                     state["seen"].append(cid)
@@ -91,7 +92,7 @@ def converse(cli, policy: str, on_turn) -> dict:
         history.append({"role": "user", "content": t})
         prior = carry(history)
         steps: list = []
-        out = react(cli, prior[-1]["content"], profile=PROFILES["operations"],
+        out = react(cli, prior[-1]["content"], profile=PROFILES["support"],
                     history=prior[:-1], budget=4,
                     on_step=lambda k, lab, det: steps.append((k, lab, det)))
         history.append({"role": "assistant", "content": out})
@@ -104,12 +105,13 @@ def converse(cli, policy: str, on_turn) -> dict:
 def resolved(last: str) -> bool:
     """Turn 3 is answered only if the agent still knows who 'they' are.
 
-    Scored on the CLIENT's number, not on a yes/no — a stateless agent can emit a
-    confident yes about nobody in particular, and that must not count as a pass.
-    $177,156 against the $250,000 limit is the answer; both numbers require C-1041.
+    Scored on the ORDER's own numbers, not on a yes/no — a stateless agent can emit
+    a confident answer about nobody in particular, and that must not count as a
+    pass. 41 days against the 30-day window is the answer, and reaching either
+    number requires knowing from turn 1 that we are talking about order A-4417.
     """
     t = (last or "").lower()
-    return ("250" in t) or ("177" in t)
+    return ("41" in t) or ("a-4417" in t) or ("30" in t and "day" in t)
 
 
 # ── web ──────────────────────────────────────────────────────────────────────
@@ -152,8 +154,9 @@ def run_web(cli, v: dict) -> str:
 def web(cli, port: int) -> None:
     serve(Panel(
         title="Memory — what it carries between turns",
-        subtitle="Three turns. The third one says 'they' and names no client. Which "
-                 "memory policy you chose decides whether that sentence means anything.",
+        subtitle="Three turns. The third says 'she' and 'it' and names neither the "
+                 "customer nor the order. Which memory policy you chose decides "
+                 "whether that sentence means anything at all.",
         intro="Run it on <b>window</b> first and read turn 3. Then switch to <b>none</b> "
               "and watch the same question become unanswerable. Then <b>facts</b> — it "
               "answers again, for a fraction of the tokens. Tick <i>compare all</i> to "
@@ -203,8 +206,8 @@ if __name__ == "__main__":
         Stage("Three policies, one conversation",
               why="Memory is not a feature you switch on. It is a carry() function: "
                   "given everything that has happened, what do you actually send? "
-                  "Turn 3 says 'they' and 'same-day' and names nobody — so it is a "
-                  "direct test of what survived.",
+                  "Turn 3 says 'she' and 'it' and names nobody and nothing — so it "
+                  "is a direct test of what actually survived.",
               fn=stage_policies,
               logic="Stateless could not resolve 'they' and had to guess or ask. The "
                     "window resolved it and re-sent the whole transcript to do it — "

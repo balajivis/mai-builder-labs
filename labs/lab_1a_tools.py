@@ -14,7 +14,7 @@ came back dead stable ([6,6,6], [5,5,5]) so you will reproduce it:
       real names              6.0/6              6.0/6
       tool_a, tool_b …        6.0/6              5.0/6
 
-      real names + MISLEADING description        5.0/6
+      real names + MISLEADING description        5.5/6  (noisier: [6,5])
 
 The answer is not the one the advice implies. Name and description are REDUNDANT
 signals for the same thing — either alone routes perfectly, and only removing
@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from _kit import Stage, banner, client, meter, say, stages           # noqa: E402
 from _lab1 import (ANON_NAMES, MISLEADING, PROFILES, ROUTING_6,      # noqa: E402
-                   build_schema, first_tool, react)
+                   build_schema, first_tool, react, real_name)
 from _web import (Knob, Panel, answer, note, port_from, section,     # noqa: E402
                   serve, step, table, wants_web)
 
@@ -63,84 +63,114 @@ def _truthy(v) -> bool:
 
 # ── web ──────────────────────────────────────────────────────────────────────
 
+# The five interfaces the same four functions can wear. Ask ONE question and see
+# where they disagree — divergence is the whole finding, and it is far more
+# legible on a question you wrote than on a battery someone else froze.
+VARIANTS = [
+    ("real names + description", dict()),
+    ("real names, NO description", dict(describe=False)),
+    ("tool_a…, description", dict(anonymise=True)),
+    ("tool_a…, NO description", dict(anonymise=True, describe=False)),
+    ("real names + MISLEADING description", dict(overrides=MISLEADING)),
+]
+
+
+def ask_variants(cli, question: str, expected: str | None) -> tuple[list[list], set]:
+    """Route one question through every interface. Returns rows + the distinct picks."""
+    rows, picks = [], set()
+    for label, kw in VARIANTS:
+        anon = kw.get("anonymise", False)
+        got = first_tool(cli, question, build_schema(**kw))
+        canon = real_name(got)          # tool_d and check_refund_window are the same function
+        picks.add(canon)
+        mark = "" if expected is None else ("✓" if canon == expected else "✗")
+        rows.append([mark, label, got, canon if anon else ""])
+    return rows, picks
+
+
 def run_web(cli, v: dict) -> str:
-    anon = _truthy(v.get("anonymise"))
-    describe = not _truthy(v.get("strip"))
-    overrides = None
-    raw = (v.get("descriptions") or "").strip()
-    if raw == "__misleading__":
-        overrides = MISLEADING
-    elif raw:
-        try:
-            parsed = json.loads(raw)
-            if isinstance(parsed, dict):
-                overrides = parsed
-        except json.JSONDecodeError:
-            pass
+    question = (v.get("question") or "").strip()
+    if not question:
+        return section("ask it something", note(
+            "Type a question, or tap one of the suggestions under the box. Anything "
+            "the four Orbit tools could plausibly answer — or deliberately something "
+            "none of them can."))
 
-    schema = build_schema(anonymise=anon, describe=describe, overrides=overrides)
-    right, rows = score_schema(cli, schema, anon)
+    expected = (v.get("expected") or "").strip() or None
+    if expected == "(let me judge)":
+        expected = None
 
-    label = ("tool_a…" if anon else "real names") + " + " + ("no description" if not describe
-                                                             else "misleading description" if raw == "__misleading__"
-                                                             else "description")
-    body = section(f"routing · {label} · {right}/{len(ROUTING_6)} correct",
-                   table(["", "question", "it picked", "should be"], rows))
+    rows, picks = ask_variants(cli, question, expected)
+    headers = ["", "interface", "it reached for", "= which function"]
+    body = section(f"“{question}”", table(headers, rows))
 
-    if _truthy(v.get("grid")):
+    if len(picks) == 1:
+        body += note(f"All five interfaces agreed: {picks.pop()}. Routing held even with "
+                     "the names stripped to tool_a and the descriptions pointing the wrong "
+                     "way. Most questions do this — try to find one that breaks it.", "good")
+    else:
+        body += note(f"They disagree — {len(picks)} different functions across five "
+                     f"interfaces: {', '.join(sorted(picks))}. This is the question worth "
+                     "keeping. Read the rows that differ and ask what signal they lost.", "warn")
+
+    if _truthy(v.get("battery")):
         cells = []
-        for an in (False, True):
-            for de in (True, False):
-                r, _ = score_schema(cli, build_schema(anonymise=an, describe=de), an)
-                cells.append([("tool_a, tool_b …" if an else "real names"),
-                              ("description" if de else "no description"),
-                              f"{r}/{len(ROUTING_6)}"])
-        body += section("the 2×2 — which knob carries the signal?",
-                        table(["names", "descriptions", "routed correctly"], cells))
+        for label, kw in VARIANTS:
+            anon = kw.get("anonymise", False)
+            r = sum(real_name(first_tool(cli, q, build_schema(**kw))) == want
+                    for q, want in ROUTING_6)
+            cells.append([label, f"{r}/{len(ROUTING_6)}"])
+        body += section("the same five interfaces over six fixed questions",
+                        table(["interface", "routed correctly"], cells))
+        body += note("Three of the five usually tie. Either the name or the description "
+                     "alone carries it; only losing BOTH — or being actively misled — "
+                     "costs a question.", "")
 
-    if v.get("task"):
+    if _truthy(v.get("full")):
         steps: list[str] = []
-        out = react(cli, v["task"], profile=PROFILES["operations"], schema=schema, budget=6,
+        out = react(cli, question, profile=PROFILES["support"],
+                    schema=build_schema(), budget=6,
                     on_step=lambda k, lab, det: steps.append(step(lab, det, k)))
-        body += section("a full run on this variant", "".join(steps) + answer(out))
+        body += section("the full agent run (good interface)", "".join(steps) + answer(out))
 
     body += section("read this", note(
-        "The functions behind these tools never change — not one line, in any variant. "
-        "Only the strings the model reads. Over three runs a cell: either signal alone "
-        "routes 6/6, and only removing BOTH drops it to 5/6. Routing is robust. But the "
-        "misleading preset — perfect names, descriptions pointing the wrong way — also "
-        "scores 5/6, so a wrong description costs as much as having no interface at all. "
-        "You may be terse. You may not be wrong. A single run of any cell is noisy; run "
-        "it a few times before you believe a one-question difference."))
+        "The functions never change — not one line, in any row. Only the strings the "
+        "model reads. When every row agrees, the interface has redundancy: the name and "
+        "the description are two signals for the same thing and either will do. When the "
+        "rows split, you have found a question where one signal was doing all the work — "
+        "and the MISLEADING row is the one to watch, because its names are still perfect "
+        "and it can still be wrong. You may be terse. You may not be wrong."))
     return body
 
 
 def web(cli, port: int) -> None:
     serve(Panel(
         title="Tools — what it can tell apart",
-        subtitle="Two knobs, turned independently: the tool's NAME and its DESCRIPTION. "
-                 "Same six questions, same four functions underneath. Which one is "
-                 "actually carrying the routing?",
-        intro="Tick <b>run the 2×2</b> first — that is the whole experiment in one table. "
-              "Write down your prediction before you press it. Then load the "
-              "<b>__misleading__</b> preset, which keeps every tool's perfect name and "
-              "only points its description the wrong way. One run per cell is noisy; the "
-              "published numbers are three runs each.",
+        subtitle="Ask one question. It is routed through five different interfaces over "
+                 "the SAME four functions — names stripped, descriptions stripped, "
+                 "descriptions pointing the wrong way — and you see where they disagree.",
+        intro="Type a question or tap a suggestion, then press Route it. Most questions "
+              "come back with all five rows agreeing: that is redundancy, and it is the "
+              "first finding. Your job is to find a question that <b>splits</b> them — "
+              "then work out which signal the losing rows were relying on. Try one no "
+              "tool can answer (<i>what is the weather?</i>), or one that two tools could "
+              "both plausibly serve (<i>can Priya get her money back?</i>).",
         knobs=[
-            Knob("grid", "Run the 2×2 grid", "select", default="true",
-                 options=[("true", "yes — all four cells (8 calls)"), ("false", "no — just this one")]),
-            Knob("anonymise", "Tool names", "select", default="false",
-                 options=[("false", "real names — search_policy, check_limits…"),
-                          ("true", "anonymous — tool_a, tool_b, tool_c, tool_d")]),
-            Knob("strip", "Descriptions", "select", default="false",
-                 options=[("false", "keep them"), ("true", "strip them entirely")]),
-            Knob("descriptions", "Override descriptions (JSON, or the word __misleading__)",
-                 "textarea", default="",
-                 help='Try __misleading__ for the measured 5.0/6 case, or paste '
-                      '{"check_limits": "…"} to write your own.'),
-            Knob("task", "Optional: run a full task on this variant", "text", default=""),
+            Knob("question", "Your question", "combo", default="",
+                 options=[q for q, _ in ROUTING_6],
+                 help="Type anything, or tap one below to load it."),
+            Knob("expected", "Which tool SHOULD it pick? (optional)", "select",
+                 default="(let me judge)",
+                 options=["(let me judge)", "search_policy", "get_customer",
+                          "get_order", "check_refund_window"],
+                 help="Set this and the rows get ticked or crossed for you."),
+            Knob("battery", "Also score all six fixed questions", "select", default="false",
+                 options=[("false", "no — just my question"),
+                          ("true", "yes — the full table (30 calls)")]),
+            Knob("full", "Also run the agent to a final answer", "select", default="false",
+                 options=[("false", "no — first tool only"), ("true", "yes — full loop")]),
         ],
-        run=run_web, button="Score the routing",
+        run=run_web, button="Route it",
     ), cli, port=port)
 
 
@@ -197,7 +227,7 @@ if __name__ == "__main__":
                     "stage the one that matters."),
         Stage("Worse than nothing",
               why="If a missing description costs you one question, what does a WRONG "
-                  "one cost? Here lookup_client is described as carrying 'their standing "
+                  "one cost? Here get_customer is described as carrying 'their standing "
                   "limit value' — true, and exactly the phrase that makes the model reach "
                   "for it when asked whether an amount fits.",
               fn=stage_misleading,

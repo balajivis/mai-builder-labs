@@ -1,10 +1,19 @@
 # -*- coding: utf-8 -*-
 """The world Lab 1 is played in — shared by all four files.
 
-Aurex Financial, four READ-ONLY tools. Read-only is the whole point of Lab 1:
-this lab is about the four design surfaces, and nothing in it should be able to
-fire a trade. The risk gate, the budget cap and the autonomy ladder live in
-Lab 4 on Sunday, where human-in-the-loop is the subject rather than a sidebar.
+**Orbit** — an online marketplace — and its customer support desk. Four
+READ-ONLY tools.
+
+The domain is deliberate. Everyone in the room has chased a refund from a big
+retailer, so nobody spends the lab decoding the scenario instead of the lesson.
+The agent decides whether Priya gets her money back, and every person reading
+that answer knows instantly whether it is a good one. You do not need the domain
+explained, which means every minute of the lab is spent on design.
+
+Read-only is also deliberate. This lab is about the four design surfaces; the
+risk gate, the budget cap and the autonomy ladder live in Lab 4, where
+human-in-the-loop is the subject rather than a sidebar. Nothing here can issue a
+refund, so nothing here competes with the design lesson.
 
     lab_1a_tools     TOOLS     what it can tell apart   ← build it first
     lab_1b_profile   PROFILE   who it is                — steer what you built
@@ -28,22 +37,32 @@ from _kit import meter
 # ── the world ────────────────────────────────────────────────────────────────
 
 POLICIES = {
-    "trading": "Trades above $50,000 notional require desk-head approval. "
-               "Same-day settlement is not offered on any instrument.",
-    "access": "Access is granted per tool, never per project. Revocation is "
-              "immediate and does not wait for the next review cycle.",
-    "disbursement": "Funds release requires two approvers when the amount exceeds "
-                    "$25,000, or any amount to a first-time beneficiary.",
+    "refunds": "Refunds are accepted within 30 days of delivery, for any reason. "
+               "Refunds above $100 require supervisor approval before they are issued.",
+    "damaged": "An item that arrived damaged or faulty is covered for 90 days from "
+               "delivery, regardless of the standard 30-day refund window. Photo "
+               "evidence is required, and counts as received once uploaded to the order.",
+    "returns": "Standard delivery is 3-5 working days. Return postage is paid by Orbit "
+               "for damaged items and by the customer otherwise. Opened items may be "
+               "returned if faulty.",
+    "membership": "Orbit Prime can be cancelled any time; the remaining month is not "
+                  "refunded. Prime members get free return postage on everything.",
 }
 
-CLIENTS = {
-    "C-1041": {"name": "Halvorsen Trust", "tier": "institutional", "limit": 250_000},
-    "C-2288": {"name": "R. Okonjo", "tier": "retail", "limit": 10_000},
+CUSTOMERS = {
+    "priya@example.com": {"name": "Priya Raman", "member_since": "2023-04-11",
+                          "plan": "Orbit Prime", "orders_last_year": 14},
+    "tom@example.com": {"name": "Tom Whitfield", "member_since": "2026-08-30",
+                        "plan": "no membership", "orders_last_year": 1},
 }
 
-INSTRUMENTS = {
-    "AXR-7": {"name": "Aurex Rates 7yr", "price": 98.42, "settles": "T+2"},
-    "HLV-2": {"name": "Halvorsen Green 2yr", "price": 101.15, "settles": "T+1"},
+ORDERS = {
+    "A-4417": {"customer": "priya@example.com", "item": "Cortado espresso machine",
+               "total": 148.50, "delivered": "2026-08-02", "days_since_delivery": 41,
+               "customer_reported": "arrived damaged — photos uploaded"},
+    "A-5120": {"customer": "tom@example.com", "item": "Walnut lamp shade",
+               "total": 32.00, "delivered": "2026-09-05", "days_since_delivery": 7,
+               "customer_reported": None},
 }
 
 
@@ -52,46 +71,35 @@ def search_policy(topic: str) -> str:
     return hit or f"No policy found for {topic!r}. Known topics: {', '.join(POLICIES)}"
 
 
-def lookup_client(client_id: str) -> str:
-    c = CLIENTS.get(str(client_id).strip().upper())
-    return json.dumps(c) if c else f"No client {client_id!r}"
+def get_customer(email: str) -> str:
+    c = CUSTOMERS.get(str(email).strip().lower())
+    return json.dumps(c) if c else f"No customer {email!r}"
 
 
-def price_instrument(symbol: str) -> str:
-    i = INSTRUMENTS.get(str(symbol).strip().upper())
-    return json.dumps(i) if i else f"No instrument {symbol!r}. Known: {', '.join(INSTRUMENTS)}"
+def get_order(order_id: str) -> str:
+    o = ORDERS.get(str(order_id).strip().upper())
+    return json.dumps(o) if o else f"No order {order_id!r}. Known: {', '.join(ORDERS)}"
 
 
-def check_limits(client_id: str, notional: float) -> str:
-    c = CLIENTS.get(str(client_id).strip().upper())
-    if not c:
-        return f"No client {client_id!r}"
-    try:
-        n = float(notional)
-    except (TypeError, ValueError):
-        return f"notional must be a number, got {notional!r}"
-    return json.dumps({"within_limit": n <= c["limit"], "limit": c["limit"], "requested": n})
+def check_refund_window(order_id: str) -> str:
+    """Answers the STANDARD window only — deliberately.
+
+    It knows nothing about the 90-day damaged-goods route, so on order A-4417 it
+    returns a perfectly accurate NO to a question nobody asked. An agent that
+    stops here is confidently wrong, and it is the tool's fault, not the model's.
+    A tool that answers a narrower question than its name suggests is the single
+    most common cause of a wrong agent — and Lab 1d is built on this one.
+    """
+    o = ORDERS.get(str(order_id).strip().upper())
+    if not o:
+        return f"No order {order_id!r}"
+    d = o["days_since_delivery"]
+    return json.dumps({"within_standard_30_day_window": d <= 30,
+                       "days_since_delivery": d, "standard_window_days": 30})
 
 
-TOOLS = {"search_policy": search_policy, "lookup_client": lookup_client,
-         "price_instrument": price_instrument, "check_limits": check_limits,
-         # the vague aliases run the very same functions — only the label differs
-         "search": search_policy, "get_info": lookup_client,
-         "lookup": price_instrument, "check": check_limits}
-
-
-def call_tool(name: str, args: dict) -> str:
-    """A tool that raises must come back as an OBSERVATION, never as a crash —
-    the agent can re-plan around a bad argument only if it gets to see one."""
-    fn = TOOLS.get(name) or TOOLS.get(real_name(name))
-    if not fn:
-        return f"No such tool {name!r}. Available: {', '.join(TOOLS)}"
-    try:
-        return fn(**(args or {}))
-    except TypeError as e:
-        return f"Tool error: wrong arguments — {e}"
-    except Exception as e:  # noqa: BLE001
-        return f"Tool error: {e}"
+TOOLS = {"search_policy": search_policy, "get_customer": get_customer,
+         "get_order": get_order, "check_refund_window": check_refund_window}
 
 
 def _fn(name: str, description: str, props: dict, required: list[str]) -> dict:
@@ -104,67 +112,57 @@ def _fn(name: str, description: str, props: dict, required: list[str]) -> dict:
 # reach for it — not merely what it returns.
 SCHEMA = [
     _fn("search_policy",
-        "Look up an Aurex internal policy that governs what is allowed. Use this "
-        "before asserting any rule. Topics: trading, access, disbursement.",
-        {"topic": {"type": "string", "description": "One of: trading, access, disbursement"}},
+        "Look up an Orbit support policy — the rules that decide what a customer is "
+        "entitled to. Use this before promising or refusing anything. Topics: refunds, "
+        "damaged, returns, membership.",
+        {"topic": {"type": "string",
+                   "description": "One of: refunds, damaged, returns, membership"}},
         ["topic"]),
-    _fn("lookup_client",
-        "Fetch a client's name, tier and standing trading limit by id (e.g. C-1041). "
-        "Use when you need who the client is or what they are permitted.",
-        {"client_id": {"type": "string", "description": "Client id, e.g. C-1041"}},
-        ["client_id"]),
-    _fn("price_instrument",
-        "Fetch an instrument's current price and settlement cycle by symbol (e.g. "
-        "AXR-7). Use to turn a quantity into a notional, or to check settlement.",
-        {"symbol": {"type": "string", "description": "Instrument symbol, e.g. AXR-7"}},
-        ["symbol"]),
-    _fn("check_limits",
-        "Answer directly whether one notional amount is inside one client's limit. "
-        "This looks the limit up itself — you do not need the client first. Returns "
-        "yes/no plus the limit, not the reason.",
-        {"client_id": {"type": "string"}, "notional": {"type": "number"}},
-        ["client_id", "notional"]),
+    _fn("get_customer",
+        "Fetch a customer's name, membership plan and how long they have shopped with "
+        "Orbit, by email address. Use when you need who you are talking to.",
+        {"email": {"type": "string", "description": "Customer email, e.g. priya@example.com"}},
+        ["email"]),
+    _fn("get_order",
+        "Fetch one order by its id (e.g. A-4417): the item, the amount paid, the "
+        "delivery date, and anything the customer reported about its condition. Use to "
+        "establish what was bought and what happened to it.",
+        {"order_id": {"type": "string", "description": "Order id, e.g. A-4417"}},
+        ["order_id"]),
+    _fn("check_refund_window",
+        "Answer directly whether an order is still inside the STANDARD 30-day refund "
+        "window. Looks the dates up itself. Returns yes/no plus the day count — it does "
+        "not consider damaged goods or any other exception.",
+        {"order_id": {"type": "string"}},
+        ["order_id"]),
 ]
 
 # The SAME four functions, named and described the way tools get written when
-# nobody owns them as an interface. Note the names go vague too — a good name
-# carries most of the routing signal by itself, so a "vague" set that keeps
-# search_policy/price_instrument is not vague at all. get_info, lookup and check
-# are what actually ships.
-VAGUE_NAMES = {"search_policy": "search", "lookup_client": "get_info",
-               "price_instrument": "lookup", "check_limits": "check"}
+# nobody owns them as an interface. The names go vague too — a good name carries
+# much of the routing signal by itself, so a "vague" set that keeps search_policy
+# is not vague at all. get_info, lookup and check are what actually ships.
+VAGUE_NAMES = {"search_policy": "search", "get_customer": "get_info",
+               "get_order": "lookup", "check_refund_window": "check"}
 VAGUE_SCHEMA = [
     _fn("search", "Search for information.", {"topic": {"type": "string"}}, ["topic"]),
-    _fn("get_info", "Get info about a record.", {"client_id": {"type": "string"}}, ["client_id"]),
-    _fn("lookup", "Look up a value.", {"symbol": {"type": "string"}}, ["symbol"]),
-    _fn("check", "Check a value against a rule.",
-        {"client_id": {"type": "string"}, "notional": {"type": "number"}},
-        ["client_id", "notional"]),
+    _fn("get_info", "Get info about a record.", {"email": {"type": "string"}}, ["email"]),
+    _fn("lookup", "Look up a value.", {"order_id": {"type": "string"}}, ["order_id"]),
+    _fn("check", "Check a value against a rule.", {"order_id": {"type": "string"}}, ["order_id"]),
 ]
 
 SCHEMAS = {"good": SCHEMA, "vague": VAGUE_SCHEMA}
 
-# ── the 2×2 that Lab 1c actually measures ────────────────────────────────────
+# ── the 2×2 that Lab 1a actually measures ────────────────────────────────────
 # Which carries the routing signal: the NAME or the DESCRIPTION? The only honest
-# way to answer is to remove each one and score what is left. Measured on the
-# class model 2026-09-12, n=3 runs per cell over the six questions in ROUTING_6 —
-# and it came back dead stable, [6,6,6] and [5,5,5], so students reproduce it:
-#
-#                    good description    no description
-#   real names             6.0/6              6.0/6
-#   tool_a, tool_b …       6.0/6              5.0/6
-#
-#   real names + MISLEADING description       5.0/6
-#
-# The lesson is NOT "write better descriptions" — we measured that and it is not
-# what the data says. Name and description are REDUNDANT signals for the same
-# thing: either one alone routes perfectly, and only removing BOTH costs you a
-# question. But a description that points the wrong way costs exactly as much as
-# removing both — even with perfect names. The description OVERRIDES the name.
+# way to answer is to remove each and score what is left. They turn out to be
+# REDUNDANT — either alone routes everything, and only removing BOTH costs a
+# question. Routing is far more robust than tool-writing advice implies. But a
+# description pointing the WRONG way costs as much as deleting both signals, and
+# does it while every name is still perfect.
 #
 # The rule that survives the measurement: you may be terse, you may not be wrong.
-ANON_NAMES = {"search_policy": "tool_a", "lookup_client": "tool_b",
-              "price_instrument": "tool_c", "check_limits": "tool_d"}
+ANON_NAMES = {"search_policy": "tool_a", "get_customer": "tool_b",
+              "get_order": "tool_c", "check_refund_window": "tool_d"}
 
 
 def build_schema(*, anonymise: bool = False, describe: bool = True,
@@ -190,68 +188,91 @@ def real_name(name: str) -> str:
     return back.get(name, name)
 
 
+def call_tool(name: str, args: dict) -> str:
+    """A tool that raises must come back as an OBSERVATION, never as a crash —
+    the agent can re-plan around a bad argument only if it gets to see one."""
+    fn = TOOLS.get(name) or TOOLS.get(real_name(name))
+    if not fn:
+        return f"No such tool {name!r}. Available: {', '.join(TOOLS)}"
+    try:
+        return fn(**(args or {}))
+    except TypeError as e:
+        return f"Tool error: wrong arguments — {e}"
+    except Exception as e:  # noqa: BLE001
+        return f"Tool error: {e}"
+
+
 # Six questions rather than four: with four tools and four obviously-separated
 # questions everything scores 4/4 and the experiment cannot discriminate.
 ROUTING_6 = [
-    ("Is $180,000 inside C-1041's limit?", "check_limits"),
-    ("What does our policy say about big trades?", "search_policy"),
-    ("When does AXR-7 settle?", "price_instrument"),
-    ("Who is C-2288?", "lookup_client"),
-    ("What is C-1041's tier?", "lookup_client"),
-    ("Is same-day settlement allowed?", "search_policy"),
+    ("Is order A-4417 still inside the refund window?", "check_refund_window"),
+    ("What does our policy say about refunds over $100?", "search_policy"),
+    # Names the ORDER, not the customer: get_order takes an id, so "what did Priya
+    # order?" is genuinely unanswerable in one hop and the model rightly declines
+    # to guess. A routing question must be answerable by the tool it is scoring.
+    ("What was in order A-4417, and what did it cost?", "get_order"),
+    ("Who is tom@example.com?", "get_customer"),
+    ("Which membership plan is priya@example.com on?", "get_customer"),
+    ("Can someone return an item that arrived broken?", "search_policy"),
 ]
 
 # A description that points the WRONG way, while every NAME stays perfect.
-# Measured 5.0/6 (n=3) — exactly the cost of deleting both signals. Note what it
-# does: "their standing limit value" is TRUE of lookup_client, and it is the very
-# phrase that pulls the model there when asked whether an amount fits.
+# Note what it does: "whether they are eligible for a refund" is a plausible
+# thing for a customer record to hold, and it is exactly the phrase that pulls
+# the model to get_customer when it should be checking the order's own window.
 MISLEADING = {
-    "check_limits": "Test ONE amount against a client's limit. Returns yes/no for that amount.",
-    "lookup_client": "Fetch a client's profile: name, tier, and their standing limit value.",
+    "check_refund_window": "Check a value against a rule for an order.",
+    "get_customer": "Fetch a customer's full support record, including their order "
+                    "history and whether they are eligible for a refund.",
 }
 
 # ── profiles ─────────────────────────────────────────────────────────────────
 
 PROFILES = {
     "blank": "You are a helpful assistant.",
-    "operations": (
-        "You are an operations agent at Aurex Financial, a regulated broker-dealer. "
-        "Establish facts with tools before you assert anything. Never state a limit "
-        "or a policy you have not looked up. Answer in at most three sentences."),
-    "compliance": (
-        "You are a compliance officer at Aurex Financial. Your job is to find the "
-        "reason something CANNOT proceed. Check policy first, always. Cite the "
-        "specific policy language you relied on. If anything is unverified, say so "
-        "plainly rather than estimating."),
-    "sales": (
-        "You are a relationship manager at Aurex Financial. You want to find a way "
-        "to say yes. Look up what you need, then propose the closest thing that "
-        "would work if the exact request cannot."),
+    "support": (
+        "You are a support agent at Orbit, an online marketplace. Look things up before "
+        "you promise or refuse anything — never state a policy or a date you have not "
+        "checked. Answer the customer in at most three sentences."),
+    "policy": (
+        "You are a refunds reviewer at Orbit. Your job is to find the reason a refund "
+        "cannot be issued as requested. Check policy first, always, and quote the "
+        "specific rule you relied on. If anything is unverified, say so plainly rather "
+        "than assuming in the customer's favour."),
+    "retention": (
+        "You are a retention specialist at Orbit. This customer is worth keeping and you "
+        "want to find a way to yes. Look up what you need, then offer the closest thing "
+        "you can actually authorise if the exact request is not possible."),
     # Used by 1b's closing experiment: does the PROFILE repair a broken TOOL layer?
-    # Measured 2026-09-12 (n=2, stable): with MISLEADING descriptions this lifts
-    # routing 5.0/6 → 6.0/6. It does, completely.
+    # With MISLEADING descriptions this lifts routing 5.0/6 → 6.0/6. It does, fully.
     "strict": (
-        "You are an operations agent at Aurex Financial. Choose tools by what the "
-        "question actually asks for. To test whether ONE amount fits a limit, use "
-        "check_limits. To fetch who a client is, use lookup_client. Do not use a "
-        "profile-fetch tool to answer a yes/no threshold question."),
+        "You are a support agent at Orbit. Choose tools by what the question actually "
+        "asks for. To test whether ONE order is still inside the refund window, use "
+        "check_refund_window. To fetch who a customer is, use get_customer. Do not use "
+        "a customer-record tool to answer a question about one order's eligibility."),
 }
 
 # ── the task every planner in 1d must answer ─────────────────────────────────
-# Four facts, three tools, and one of them contradicts the premise of the
-# question — which is what makes an adaptive planner worth its cost.
+# Four facts, three tools, and a trap: check_refund_window returns a perfectly
+# accurate NO — 41 days, outside the standard 30. An agent that stops there tells
+# Priya no, confidently and wrongly. The damaged-goods policy overrides the
+# standard window, and it lives in a DIFFERENT tool. This is what makes the task
+# worth three planners: the cheap ones have to find it too.
 
-TASK = ("Client C-1041 wants to buy 1,800 units of AXR-7 and settle today. "
-        "Can we do it? Answer yes or no and give every reason.")
+TASK = ("Priya (priya@example.com) is asking for a refund on order A-4417. "
+        "She says it arrived damaged. Can we refund her? Answer yes or no, "
+        "and give every reason.")
 
 # Frozen BEFORE any planner ran — the only order in which a measure means
 # anything (house rule 2: the measure is frozen before the system is good).
 MUST_MENTION = {
-    "notional ≈ $177k": lambda t: bool(re.search(r"17[67][,.]?\d{3}|177\s?k", t, re.I)),
-    "over the $50k desk-head threshold": lambda t: "desk" in t.lower() or "50,000" in t or "50k" in t.lower(),
-    "within the $250k client limit": lambda t: "250" in t,
-    "same-day settlement refused (T+2)": lambda t: any(
-        s in t.lower() for s in ("t+2", "same-day", "same day", "two business days")),
+    "the $148.50 amount": lambda t: "148" in t,
+    "41 days — outside the standard 30-day window":
+        lambda t: "41" in t or "30-day" in t.lower() or "30 day" in t.lower(),
+    "damaged goods are covered to 90 days":
+        lambda t: "90" in t or "damag" in t.lower(),
+    "over $100, so a supervisor must approve":
+        lambda t: "supervisor" in t.lower() or "approval" in t.lower() or "approve" in t.lower(),
 }
 
 
@@ -311,36 +332,24 @@ def first_tool(cli, question: str, schema, profile: str | None = None) -> str:
     """What does it reach for FIRST? One call, no loop — routing is the whole test.
 
     `profile` is a real parameter, not decoration: 1b's combine experiment holds the
-    schema fixed and varies ONLY this. (It was hardcoded to PROFILES['operations']
-    at first, which silently made that whole experiment a no-op — every row came
-    back identical because every row was in fact the same run.)
+    schema fixed and varies ONLY this. (It was hardcoded to the support profile at
+    first, which silently made that whole experiment a no-op — every row came back
+    identical because every row was in fact the same run.)
     """
     reply = cli.chat.completions.create(
         model="mai", tools=schema,
-        messages=[{"role": "system", "content": profile or PROFILES["operations"]},
+        messages=[{"role": "system", "content": profile or PROFILES["support"]},
                   {"role": "user", "content": question}])
     meter.add(reply.usage, "routing")
     tc = reply.choices[0].message.tool_calls
     return tc[0].function.name if tc else "(answered with no tool)"
 
 
-ROUTING = [
-    ("Is $180,000 inside C-1041's limit?", "check_limits"),
-    ("What does our policy say about big trades?", "search_policy"),
-    ("When does AXR-7 settle?", "price_instrument"),
-    ("Who is C-2288?", "lookup_client"),
-]
-
-
-def expected_for(schema, want: str) -> str:
-    """The vague set answers to different names for the same functions."""
-    names = {s["function"]["name"] for s in schema}
-    alias = VAGUE_NAMES.get(want)
-    return alias if alias in names else want
+ROUTING = ROUTING_6   # back-compat for anything importing the older short list
 
 __all__ = [
-    "POLICIES", "CLIENTS", "INSTRUMENTS", "TOOLS", "call_tool",
+    "POLICIES", "CUSTOMERS", "ORDERS", "TOOLS", "call_tool",
     "SCHEMA", "VAGUE_SCHEMA", "SCHEMAS", "PROFILES", "TASK", "MUST_MENTION",
-    "score", "Probe", "react", "first_tool", "ROUTING", "ROUTING_6", "expected_for",
+    "score", "Probe", "react", "first_tool", "ROUTING", "ROUTING_6",
     "VAGUE_NAMES", "ANON_NAMES", "build_schema", "real_name", "MISLEADING",
 ]

@@ -12,19 +12,35 @@ ReWOO. It is which shape of problem each planner suits, and what each costs:
     ReWOO              plan with #E placeholders, execute with the model OUT of the
                        loop, solve once at the end. Fewest calls. Blind in the same way.
 
+The task is Priya's refund, and it has a trap in it. check_refund_window returns
+a perfectly accurate NO — 41 days, outside the standard 30. An agent that stops
+there tells a customer no, confidently and wrongly: damaged goods are covered for
+90 days, and that fact lives in a DIFFERENT tool. Every planner has to go and
+find it.
+
 Measured on the class model, 2026-09-12:
 
-    planner            LLM calls   tokens   facts found
-    ReAct                      3     1839         4 / 4
-    Plan-and-Execute           2      867         3 / 4
-    ReWOO                      2      812         4 / 4
+    planner            LLM calls   tokens   secs   facts found
+    ReAct                      2     1376    3.6         4 / 4
+    Plan-and-Execute           2      958    5.5         4 / 4
+    ReWOO                      2      810    4.0         4 / 4
 
-Read that before you assume the adaptive planner wins. ReWOO matched ReAct's
-answer on 44% of the tokens. Plan-and-Execute lost a fact for a specific and
-instructive reason: its plan is fixed before anything runs, so it could not feed
-the notional it had just computed into the limit check. ReWOO plans blind too —
-but its #E placeholders let one step consume another's result, which is the
-entire difference between the two, and it is worth one whole fact here.
+All three found the trap. That is the result, and it is more common than the
+literature implies: when a task is genuinely multi-hop but not adversarial,
+architecture buys you very little accuracy. What it buys is COST — ReWOO answered
+identically on 59% of ReAct's tokens, because it pays the model once to plan and
+once to conclude, and nothing in between.
+
+So the honest conclusion is the unglamorous one: they tied, so take the cheapest.
+Reach for ReAct when a step can genuinely surprise the plan — and notice that on
+this task none of them was surprised, which you only know because you measured
+rather than assumed.
+
+One mechanism still worth understanding even though it did not bite here:
+Plan-and-Execute fixes its whole route before anything runs, so it cannot feed a
+value it computed mid-run into a later call. ReWOO plans blind too, but its #E
+placeholders let one step consume another's result. On a task that needs that
+chaining, that single difference is worth a whole fact.
 
     python labs/lab_1d_planning.py           guided walkthrough in the terminal
     python labs/lab_1d_planning.py --web     knobs in the browser
@@ -127,7 +143,7 @@ def run_one(cli, name: str, task: str, profile: str, on_step) -> dict:
 
 def run_web(cli, v: dict) -> str:
     task = (v.get("task") or "").strip() or TASK
-    profile = (v.get("profile") or "").strip() or PROFILES["operations"]
+    profile = (v.get("profile") or "").strip() or PROFILES["support"]
     chosen = v.get("planner") or "all"
     names = list(PLANNERS) if chosen == "all" else [chosen]
 
@@ -153,15 +169,14 @@ def run_web(cli, v: dict) -> str:
             body += note(f"{r['name']} missed: {', '.join(r['missed'])}", "warn")
 
     body += section("read this", note(
-        "Read the table as a trade, not a ranking — and notice it may not go the way "
-        "these planners' reputations suggest. In our run ReWOO matched ReAct at 4/4 for "
-        "44% of the tokens, and Plan-and-Execute lost a fact for a precise reason: its "
-        "plan is fixed before anything runs, so it could not feed the notional it had "
-        "just computed into the limit check. ReWOO plans blind too, but its #E "
-        "placeholders let one step consume another's result — that is the whole "
-        "difference, and here it is worth one fact. The facts column makes this a "
+        "Read the table as a trade, not a ranking. In our run all three planners found "
+        "the trap and scored 4/4 — architecture bought no accuracy at all on a task "
+        "that is multi-hop but not adversarial. What it bought was cost: ReWOO answered "
+        "identically on 59% of ReAct's tokens, paying the model once to plan and once to "
+        "conclude and nothing in between. The facts column is what makes this a "
         "measurement rather than an opinion: those four were frozen before any planner "
-        "ran. If a cheap planner scores the same, take the cheap planner."))
+        "ran. If a cheap planner scores the same, take the cheap planner — and you only "
+        "know that it did because you measured instead of assuming."))
     return body
 
 
@@ -171,10 +186,10 @@ def web(cli, port: int) -> None:
         subtitle="One task, four tools, three architectures. Only the planner moves. "
                  "The scorecard was frozen before any of them ran.",
         intro="Run <b>all three</b> first and read the table. Then try a task with NO "
-              "surprise in it (\"What is C-2288's limit?\") and watch ReAct's advantage "
-              "disappear — that is the whole lesson. The four facts being scored: "
-              "notional ≈ $177k · over the $50k desk-head threshold · within the $250k "
-              "client limit · same-day refused because AXR-7 settles T+2.",
+              "surprise in it (\"Who is tom@example.com?\") and watch the planners "
+              "converge — that is the whole lesson. The four facts being scored: the "
+              "$148.50 amount · 41 days, outside the standard 30-day window · damaged "
+              "goods are covered for 90 days · over $100, so a supervisor must approve.",
         knobs=[
             Knob("planner", "Architecture", "select", default="all",
                  options=[("all", "all three — compare"), ("ReAct", "ReAct only"),
@@ -182,7 +197,7 @@ def web(cli, port: int) -> None:
             Knob("task", "The task", "textarea", default=TASK,
                  help="The scorecard only fits the default task — change it and the "
                       "facts column stops meaning anything."),
-            Knob("profile", "Profile", "textarea", default=PROFILES["operations"]),
+            Knob("profile", "Profile", "textarea", default=PROFILES["support"]),
         ],
         run=run_web, button="Run the bake-off",
     ), cli, port=port)
@@ -196,7 +211,7 @@ def stage_bakeoff(cli):
     results = []
     for name in PLANNERS:
         say(f"[bold yellow]── {name} ──[/bold yellow]")
-        r = run_one(cli, name, TASK, PROFILES["operations"],
+        r = run_one(cli, name, TASK, PROFILES["support"],
                     lambda k, lab, det: say(
                         f"  [{'green' if k == 'good' else 'red' if k == 'bad' else 'yellow' if k == 'warn' else 'dim'}]"
                         f"{'✓' if k == 'good' else '⛔' if k == 'bad' else '→'}[/] {lab}"))
@@ -229,17 +244,15 @@ if __name__ == "__main__":
                   "calls of the three, and blind to surprise in the same way. Same task, "
                   "same tools; only the architecture moves.",
               fn=stage_bakeoff,
-              logic="Read the table as a trade, not a ranking — and notice the trade "
-                    "did not go the way the reputation of these planners suggests. ReAct "
-                    "thought between every step and bought nothing with it: ReWOO tied it "
-                    "at 4/4 for well under half the tokens. Plan-and-Execute lost a fact "
-                    "for a precise reason worth more than the score — its plan is fixed "
-                    "before anything runs, so it could not feed the notional it had just "
-                    "computed into the limit check. ReWOO plans blind too, but its #E "
-                    "placeholders let one step consume another's result. That is the "
-                    "whole difference between them, and here it is worth one fact. The "
-                    "facts column is what makes this a measurement rather than an "
-                    "opinion: those four were frozen before any planner ran. If a cheap "
-                    "planner scores the same, take the cheap planner."),
+              logic="All three found the trap and tied at 4/4 — the adaptive planner "
+                    "bought no accuracy here at all. On a task that is multi-hop but not "
+                    "adversarial, that is the normal result, and it is worth more than a "
+                    "win would have been: ReAct thought between every step and got the "
+                    "same answer ReWOO reached by paying the model once to plan and once "
+                    "to conclude, on 59% of the tokens. So take the cheapest. Reach for "
+                    "ReAct when a step can genuinely surprise the plan — and note you "
+                    "only know none of them was surprised because you measured. The "
+                    "facts column makes this a measurement rather than an opinion: those "
+                    "four were frozen before any planner ran."),
     ])
     meter.show()

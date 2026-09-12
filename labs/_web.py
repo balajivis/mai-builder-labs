@@ -126,6 +126,11 @@ button:hover{background:#fbbf24} button:disabled{opacity:.5;cursor:wait}
 .presets button{width:auto;background:#27272a;color:#d4d4d8;font-size:11.5px;
   font-weight:600;padding:5px 10px;border:1px solid #3f3f46}
 .presets button:hover{background:#3f3f46;color:#fafafa}
+.chips{display:flex;flex-direction:column;gap:4px;margin-top:7px}
+.chips button{width:100%;text-align:left;background:#0f0f11;color:#a1a1aa;
+  border:1px solid #27272a;border-radius:6px;padding:5px 9px;font-size:11.5px;
+  font-weight:500;cursor:pointer;line-height:1.35}
+.chips button:hover{background:#27272a;color:#fafafa;border-color:#3f3f46}
 .out{min-height:220px}
 section{background:#18181b;border:1px solid #27272a;border-radius:12px;
   padding:15px 18px;margin-bottom:14px}
@@ -185,6 +190,21 @@ def _knob_html(k: Knob) -> str:
     hint = f'<p class="hint">{esc(k.help)}</p>' if k.help else ""
     if k.kind == "textarea":
         field_html = f'<textarea data-k="{k.key}">{esc(k.default)}</textarea>'
+    elif k.kind == "combo":
+        # Type anything, or pick a suggestion. <datalist> is the only native
+        # editable-dropdown HTML has, and it needs no JS at all.
+        lid = f"dl_{k.key}"
+        opts = "".join(f'<option value="{esc(o if not isinstance(o, (tuple, list)) else o[0])}">'
+                       f'{esc(o[1]) if isinstance(o, (tuple, list)) and len(o) > 1 else ""}</option>'
+                       for o in k.options)
+        field_html = (f'<input type="text" data-k="{k.key}" list="{lid}" '
+                      f'value="{esc(k.default)}" autocomplete="off">'
+                      f'<datalist id="{lid}">{opts}</datalist>'
+                      f'<div class="chips">' + "".join(
+                          f"""<button type="button" onclick='preset({json.dumps(k.key)},"""
+                          f"""{json.dumps(o if not isinstance(o, (tuple, list)) else o[0])})'>"""
+                          f'{esc((o if not isinstance(o, (tuple, list)) else o[0])[:44])}</button>'
+                          for o in k.options) + '</div>')
     elif k.kind == "select":
         opts = []
         for o in k.options:

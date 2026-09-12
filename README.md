@@ -46,7 +46,7 @@ Tools come first because they are the thing you **build** — the profile is a k
 
 | | Surface | Run it | The question it answers |
 |---|---|---|---|
-| **1a** | **Tools** | `python labs/lab_1a_tools.py --web` | What can it tell apart? A 2×2 on names vs descriptions — and the answer is not the one the usual advice implies. **Start here.** |
+| **1a** | **Tools** | `python labs/lab_1a_tools.py --web` | What can it tell apart? Ask it anything and watch five different interfaces route it. **Start here.** |
 | **1b** | **Profile** | `python labs/lab_1b_profile.py --web` | Who is it? The knob on the machine you just built — closing on whether a profile can repair a broken tool layer. It can. |
 | **1c** | **Memory** | `python labs/lab_1c_memory.py --web` | What survives a turn? Turn 3 says "they" and names nobody. Five policies, five different bills. |
 | **1d** | **Planning** | `python labs/lab_1d_planning.py --web` | How does it decide? ReAct vs Plan-and-Execute vs ReWOO, on one frozen scorecard. |
@@ -59,7 +59,11 @@ Every tool in Lab 1 is **read-only on purpose**. The risk gate, the budget cap a
 
 ## What is different from Level 2
 
-**[`labs/_aurex.py`](./labs/_aurex.py) is the spine of the weekend.** Aurex Financial is a regulated firm with nine tools, three of them destructive and two irreversible. L2's Meridian corpus existed so *retrieval* mistakes were visible; Aurex exists so *control* mistakes are visible.
+**Two fixtures, one for each half of the weekend.**
+
+**[`labs/_lab1.py`](./labs/_lab1.py) — Orbit, an online marketplace and its support desk.** Four read-only tools over customers, orders and refund policy. The domain is chosen so nobody spends the lab decoding the scenario: everyone has chased a refund from a big retailer, and everyone can tell instantly whether the agent's answer to Priya is a good one. Lab 1 is about *design*, so nothing in it can issue a refund — there is no gate to distract from the four surfaces.
+
+**[`labs/_aurex.py`](./labs/_aurex.py) — Aurex Financial, from Lab 2 on.** A regulated firm with nine tools, three destructive and two irreversible. L2's Meridian corpus existed so *retrieval* mistakes were visible; Aurex exists so *control* mistakes are visible, and it is where the gate, the budget cap and the autonomy ladder live.
 
 Three things live there and nowhere else:
 

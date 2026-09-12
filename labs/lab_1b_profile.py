@@ -15,8 +15,9 @@ not true, and this lab will not pretend otherwise.
 
 What moved was the VERDICT, on identical facts:
 
-    blank        "Yes — $180,000 is within C-1041's $250,000 trading limit."
-    compliance   "It cannot proceed without desk-head approval."
+    blank        "Yes — she's covered, the item arrived damaged."
+    policy       "No — order A-4417 was delivered 41 days ago, outside the 30-day
+                  refund window."
 
 Same tools, same lookups, same numbers, opposite headline. The profile is not
 deciding what the agent knows. It is deciding what the agent thinks the question
@@ -39,7 +40,7 @@ from _lab1 import (ANON_NAMES, MISLEADING, PROFILES, ROUTING_6,       # noqa: E4
 from _web import (Knob, Panel, answer, note, port_from, presets,     # noqa: E402
                   section, serve, step, table, wants_web)
 
-QUESTION = "Can client C-1041 trade $180,000 today?"
+QUESTION = "Can we refund Priya for order A-4417? It arrived damaged."
 
 # ── web ──────────────────────────────────────────────────────────────────────
 
@@ -92,7 +93,7 @@ def web(cli, port: int) -> None:
               "remove the instruction to look things up and see what it invents.",
         knobs=[
             Knob("profile", "The profile (system prompt)", "textarea",
-                 default=PROFILES["operations"],
+                 default=PROFILES["support"],
                  help="The entire standing instruction. This is the knob."),
             Knob("question", "The question", "text", default=QUESTION),
             Knob("budget", "Step budget", "slider", default=5, min=1, max=8,
@@ -114,7 +115,7 @@ def rescue_grid(cli, n: int = 1) -> list[list]:
     rows = []
     for dlabel, schema in (("good", build_schema()),
                            ("misleading", build_schema(overrides=MISLEADING))):
-        for plabel, prof in (("plain", PROFILES["operations"]), ("strict", PROFILES["strict"])):
+        for plabel, prof in (("plain", PROFILES["support"]), ("strict", PROFILES["strict"])):
             hits = []
             for _ in range(n):
                 hits.append(sum(first_tool(cli, q, schema, prof) == want
@@ -139,7 +140,7 @@ def _run(cli, profile: str, label: str) -> None:
 
 def stage_compare(cli):
     say("Same question. Same four tools. Same model. Only the profile changes.\n")
-    for name in ("blank", "operations", "compliance"):
+    for name in ("blank", "support", "policy"):
         _run(cli, PROFILES[name], name)
 
 
