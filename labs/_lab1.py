@@ -269,8 +269,10 @@ MUST_MENTION = {
     "the $148.50 amount": lambda t: "148" in t,
     "41 days — outside the standard 30-day window":
         lambda t: "41" in t or "30-day" in t.lower() or "30 day" in t.lower(),
-    "damaged goods are covered to 90 days":
-        lambda t: "90" in t or "damag" in t.lower(),
+    # Must cite the 90-day cover itself. Scoring this on the word "damaged" was a
+    # leak: get_order hands the damage report over for free, so an agent that never
+    # opened the policy still scored the point and looked correct on the scoreboard.
+    "damaged goods are covered to 90 days": lambda t: "90" in t,
     "over $100, so a supervisor must approve":
         lambda t: "supervisor" in t.lower() or "approval" in t.lower() or "approve" in t.lower(),
 }

@@ -57,6 +57,19 @@ def answer(text: str) -> str:
     return f'<div class="answer">{esc(text)}</div>'
 
 
+def verdict(headline: str, detail: str = "", ok: bool = False) -> str:
+    """The banner that says, in plain language, whether this answer was any good."""
+    d = f"<span>{esc(detail)}</span>" if detail else ""
+    return f'<div class="verdict {"good" if ok else "bad"}"><b>{esc(headline)}</b>{d}</div>'
+
+
+def request(name: str, args: str) -> str:
+    """What the model ACTUALLY emitted — a request, not a result. Beat 1 made visible."""
+    return (f'<div class="req"><span class="k">the model emitted:</span>\n'
+            f'{{ "name": "{esc(name)}", "arguments": {esc(args)} }}\n'
+            f'<span class="k">your code ran it and handed back the result.</span></div>')
+
+
 def table(headers: list[str], rows: list[list], highlight: int | None = None) -> str:
     th = "".join(f"<th>{esc(x)}</th>" for x in headers)
     trs = []
@@ -131,6 +144,21 @@ button:hover{background:#fbbf24} button:disabled{opacity:.5;cursor:wait}
   border:1px solid #27272a;border-radius:6px;padding:5px 9px;font-size:11.5px;
   font-weight:500;cursor:pointer;line-height:1.35}
 .chips button:hover{background:#27272a;color:#fafafa;border-color:#3f3f46}
+.checks{display:flex;flex-direction:column;gap:2px}
+.chk{display:flex;align-items:flex-start;gap:8px;padding:7px 9px;border-radius:7px;
+  cursor:pointer;border:1px solid transparent;font-weight:500;color:#a1a1aa;margin:0}
+.chk:hover{background:#0f0f11;border-color:#27272a}
+.chk input{accent-color:#f59e0b;margin:2px 0 0;flex:none;width:15px;height:15px}
+.chk span{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;line-height:1.5}
+.chk input:checked+span{color:#fafafa}
+.verdict{border-radius:10px;padding:14px 16px;margin:0 0 14px;font-size:14px;line-height:1.55}
+.verdict.bad{background:#2a1215;border:1px solid #7f1d1d;color:#fca5a5}
+.verdict.good{background:#0f2018;border:1px solid #14532d;color:#86efac}
+.verdict b{display:block;font-size:15px;margin-bottom:3px}
+.req{background:#0b0b0d;border:1px solid #27272a;border-radius:8px;padding:11px 13px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;color:#a1a1aa;
+  white-space:pre-wrap;margin:6px 0}
+.req .k{color:#f59e0b}
 .out{min-height:220px}
 section{background:#18181b;border:1px solid #27272a;border-radius:12px;
   padding:15px 18px;margin-bottom:14px}
@@ -163,7 +191,15 @@ const $=s=>document.querySelector(s);
 function values(){const v={};document.querySelectorAll('[data-k]').forEach(e=>{
   v[e.dataset.k]=e.type==='checkbox'?e.checked:e.value});return v}
 function preset(k,val){const e=document.querySelector(`[data-k="${k}"]`);
-  if(e){e.value=val;e.dispatchEvent(new Event('input'))}}
+  if(!e)return; e.value=val;
+  const g=document.querySelector(`.checks[data-for="${k}"]`);
+  if(g){const on=new Set(String(val).split(','));
+    g.querySelectorAll('input').forEach(i=>{i.checked=on.has(i.value)})}
+  e.dispatchEvent(new Event('input'))}
+document.querySelectorAll('.checks').forEach(g=>{
+  const key=g.dataset.for, hid=document.querySelector(`input[data-k="${key}"]`);
+  const sync=()=>{hid.value=[...g.querySelectorAll('input:checked')].map(i=>i.value).join(',')};
+  g.addEventListener('change',sync);sync()});
 document.querySelectorAll('input[type=range]').forEach(r=>{
   const out=document.querySelector(`#v_${r.dataset.k}`);
   const sync=()=>{if(out)out.textContent=r.value};r.addEventListener('input',sync);sync()});
@@ -205,6 +241,19 @@ def _knob_html(k: Knob) -> str:
                           f"""{json.dumps(o if not isinstance(o, (tuple, list)) else o[0])})'>"""
                           f'{esc((o if not isinstance(o, (tuple, list)) else o[0])[:44])}</button>'
                           for o in k.options) + '</div>')
+    elif k.kind == "checks":
+        # A checkbox group. Value arrives as a comma-joined string of the ticked
+        # keys, so run_fn never has to care that HTML has no native multi-value input.
+        boxes = []
+        on = set(str(k.default).split(",")) if k.default else set()
+        for o in k.options:
+            val, lab = o if isinstance(o, (tuple, list)) else (o, o)
+            boxes.append(
+                f'<label class="chk"><input type="checkbox" data-chk="{k.key}" '
+                f'value="{esc(val)}"{" checked" if val in on else ""}>'
+                f'<span>{esc(lab)}</span></label>')
+        field_html = (f'<input type="hidden" data-k="{k.key}" value="{esc(k.default)}">'
+                      f'<div class="checks" data-for="{k.key}">{"".join(boxes)}</div>')
     elif k.kind == "select":
         opts = []
         for o in k.options:
