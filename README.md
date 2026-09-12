@@ -21,8 +21,10 @@ Then **mint your personal MAI key** at [study.modernaipro.com/practice](https://
 **Smoke-test** — proves Python, the install and your key in one shot:
 
 ```bash
-python labs/lab_1.py
+python labs/lab_1a_profile.py --web
 ```
+
+That opens a page at `localhost:7860` with the lab's knobs on it. No extra install: the panel is served by Python's own standard library, so there is nothing to `pip install` and nothing to sign in to. Drop `--web` for the same lab as a guided walkthrough in the terminal — both run the same code.
 
 ## The labs
 
@@ -30,11 +32,26 @@ Run in order; each builds on the last.
 
 | Day | Lab | Name |
 |---|---|---|
-| 1 (Fri) | 1 | **Build the Loop You Can Audit** — the graph, tools, and the stop decision |
+| 1 (Fri) | 1 | **Designing the Agent** — profile · memory · tools · planning (four files, below) |
 | 2 (Sat) | 2 | **Tools, Budgets and Self-Aimed Retrieval** — descriptions that route, caps that stop, agentic RAG |
 | 2 (Sat) | 3 | **Wire a Topology, Then Earn It** — supervisor · collaboration · pipeline, and the ablation against one agent |
 | 3 (Sun) | 4 | **Human-in-the-Loop Controls** — risk tags, approval queues, escalation, fail closed |
 | 3 (Sun) | 5 | **Prove It, Guard It, Ship It** — the capstone: golden set, red-team, one system on your own use case |
+
+### Lab 1 is four files, one per design surface
+
+An agent is not one thing you prompt. It is four surfaces you choose, and each one changes behaviour without touching the model. Run the one being taught; each takes about three minutes.
+
+| | Surface | Run it | The question it answers |
+|---|---|---|---|
+| **1a** | **Profile** | `python labs/lab_1a_profile.py --web` | Who is it? Same question, same tools — a different paragraph makes a different colleague. **Start here.** |
+| **1b** | **Memory** | `python labs/lab_1b_memory.py --web` | What survives a turn? Turn 3 says "they" and names nobody. Five policies, five different bills. |
+| **1c** | **Tools** | `python labs/lab_1c_tools.py --web` | What can it tell apart? Same four functions, two sets of descriptions, different routing. |
+| **1d** | **Planning** | `python labs/lab_1d_planning.py --web` | How does it decide? ReAct vs Plan-and-Execute vs ReWOO, on one frozen scorecard. |
+
+`python labs/lab_1.py` runs all four back to back.
+
+Every tool in Lab 1 is **read-only on purpose**. The risk gate, the budget cap and the autonomy ladder are Lab 4 on Sunday, where human-in-the-loop is the subject rather than a sidebar — nothing in Lab 1 should compete with the design lesson.
 
 ## What is different from Level 2
 
