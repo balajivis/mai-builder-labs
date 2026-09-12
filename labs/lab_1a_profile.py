@@ -7,9 +7,20 @@ The profile is the cheapest design surface you have. No code, no schema, no
 deploy — one paragraph. It is also the surface most often written once and
 never looked at again, which is why it is the first thing to play with.
 
-Watch it change more than tone. The same question, the same four tools and the
-same model produce a different colleague: a different FIRST tool, a different
-willingness to answer at all, a different definition of a good answer.
+Watch what it does and does NOT change. Measured on the class model 2026-09-12,
+every profile — including "You are a helpful assistant" — reached for the same
+two tools. Modern models use the tools you give them whether or not you told
+them to, so the popular claim that a bare profile "answers from nothing" is just
+not true, and this lab will not pretend otherwise.
+
+What moved was the VERDICT, on identical facts:
+
+    blank        "Yes — $180,000 is within C-1041's $250,000 trading limit."
+    compliance   "It cannot proceed without desk-head approval."
+
+Same tools, same lookups, same numbers, opposite headline. The profile is not
+deciding what the agent knows. It is deciding what the agent thinks the question
+was — and which of the true things it found is the one worth leading with.
 
     python labs/lab_1a_profile.py           guided walkthrough in the terminal
     python labs/lab_1a_profile.py --web     knobs in the browser  ← start here
@@ -51,8 +62,10 @@ def run_web(cli, v: dict) -> str:
     body += section("what it said", answer(out or "(nothing — it ran out of budget)"))
     body += section("read this", note(
         f"It reached for {first} first, used {len(steps)} move(s), and answered in "
-        f"{len(out.split())} words. Change one line of the profile and run it again: "
-        "the tools did not move, the model did not move, the question did not move."))
+        f"{len(out.split())} words. Now run a different profile on the same question and "
+        "compare the FIRST SENTENCE of each. The tool calls will probably be identical — "
+        "what changes is which true fact the agent decided you were asking about. To the "
+        "person reading it, that choice is the answer."))
     return body
 
 
@@ -128,12 +141,16 @@ if __name__ == "__main__":
                   "never read again. Watch it change not just TONE but which tool the "
                   "agent reaches for and whether it is willing to answer at all.",
               fn=stage_compare,
-              logic="'Helpful assistant' answered from nothing it had checked. The "
-                    "operations profile looked things up. The compliance profile went "
-                    "to policy FIRST and came back with the reason it cannot proceed. "
-                    "None of that is model capability — it is instruction. Before you "
-                    "add a tool or reach for a graph, ask whether the profile you wrote "
-                    "is the one you meant."),
+              logic="Look at what did NOT move: every profile used the tools. A bare "
+                    "'helpful assistant' still looked up the policy and the limit — so "
+                    "the usual claim that a weak profile makes an agent hallucinate its "
+                    "facts is not what happens here. What moved is the VERDICT on "
+                    "identical facts: blank leads with 'yes, within limit', compliance "
+                    "leads with 'cannot proceed without approval'. Both are true. The "
+                    "profile is not deciding what the agent knows; it is deciding which "
+                    "true thing it leads with — which, to the person reading the answer, "
+                    "IS the answer. Before you add a tool or reach for a graph, ask "
+                    "whether the profile you wrote is the one you meant."),
         Stage("Now write one",
               why="A profile is a product decision wearing a paragraph. Who does this "
                   "agent work for? What is it allowed to assume? What does it do when "

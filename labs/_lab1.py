@@ -71,13 +71,16 @@ def check_limits(client_id: str, notional: float) -> str:
 
 
 TOOLS = {"search_policy": search_policy, "lookup_client": lookup_client,
-         "price_instrument": price_instrument, "check_limits": check_limits}
+         "price_instrument": price_instrument, "check_limits": check_limits,
+         # the vague aliases run the very same functions — only the label differs
+         "search": search_policy, "get_info": lookup_client,
+         "lookup": price_instrument, "check": check_limits}
 
 
 def call_tool(name: str, args: dict) -> str:
     """A tool that raises must come back as an OBSERVATION, never as a crash —
     the agent can re-plan around a bad argument only if it gets to see one."""
-    fn = TOOLS.get(name)
+    fn = TOOLS.get(name) or TOOLS.get(real_name(name))
     if not fn:
         return f"No such tool {name!r}. Available: {', '.join(TOOLS)}"
     try:
@@ -113,23 +116,96 @@ SCHEMA = [
         {"symbol": {"type": "string", "description": "Instrument symbol, e.g. AXR-7"}},
         ["symbol"]),
     _fn("check_limits",
-        "Test one specific notional amount against one client's limit. Use only "
-        "AFTER you know both the client and the amount; it answers yes/no, not why.",
+        "Answer directly whether one notional amount is inside one client's limit. "
+        "This looks the limit up itself — you do not need the client first. Returns "
+        "yes/no plus the limit, not the reason.",
         {"client_id": {"type": "string"}, "notional": {"type": "number"}},
         ["client_id", "notional"]),
 ]
 
-# Same four functions, described the way tools get written when nobody owns them.
+# The SAME four functions, named and described the way tools get written when
+# nobody owns them as an interface. Note the names go vague too — a good name
+# carries most of the routing signal by itself, so a "vague" set that keeps
+# search_policy/price_instrument is not vague at all. get_info, lookup and check
+# are what actually ships.
+VAGUE_NAMES = {"search_policy": "search", "lookup_client": "get_info",
+               "price_instrument": "lookup", "check_limits": "check"}
 VAGUE_SCHEMA = [
-    _fn("search_policy", "Search policies.", {"topic": {"type": "string"}}, ["topic"]),
-    _fn("lookup_client", "Get client info.", {"client_id": {"type": "string"}}, ["client_id"]),
-    _fn("price_instrument", "Get price.", {"symbol": {"type": "string"}}, ["symbol"]),
-    _fn("check_limits", "Check limits.",
+    _fn("search", "Search for information.", {"topic": {"type": "string"}}, ["topic"]),
+    _fn("get_info", "Get info about a record.", {"client_id": {"type": "string"}}, ["client_id"]),
+    _fn("lookup", "Look up a value.", {"symbol": {"type": "string"}}, ["symbol"]),
+    _fn("check", "Check a value against a rule.",
         {"client_id": {"type": "string"}, "notional": {"type": "number"}},
         ["client_id", "notional"]),
 ]
 
 SCHEMAS = {"good": SCHEMA, "vague": VAGUE_SCHEMA}
+
+# ── the 2×2 that Lab 1c actually measures ────────────────────────────────────
+# Which carries the routing signal: the NAME or the DESCRIPTION? The only honest
+# way to answer is to remove each one and score what is left. Measured on the
+# class model 2026-09-12, n=3 runs per cell over the six questions in ROUTING_6 —
+# and it came back dead stable, [6,6,6] and [5,5,5], so students reproduce it:
+#
+#                    good description    no description
+#   real names             6.0/6              6.0/6
+#   tool_a, tool_b …       6.0/6              5.0/6
+#
+#   real names + MISLEADING description       5.0/6
+#
+# The lesson is NOT "write better descriptions" — we measured that and it is not
+# what the data says. Name and description are REDUNDANT signals for the same
+# thing: either one alone routes perfectly, and only removing BOTH costs you a
+# question. But a description that points the wrong way costs exactly as much as
+# removing both — even with perfect names. The description OVERRIDES the name.
+#
+# The rule that survives the measurement: you may be terse, you may not be wrong.
+ANON_NAMES = {"search_policy": "tool_a", "lookup_client": "tool_b",
+              "price_instrument": "tool_c", "check_limits": "tool_d"}
+
+
+def build_schema(*, anonymise: bool = False, describe: bool = True,
+                 overrides: dict | None = None) -> list[dict]:
+    """A copy of SCHEMA with the name and/or description knobs turned."""
+    out = json.loads(json.dumps(SCHEMA))   # deep copy — never mutate the shared one
+    for t in out:
+        f = t["function"]
+        real = f["name"]
+        if overrides and real in overrides:
+            f["description"] = str(overrides[real])
+        if not describe:
+            f["description"] = ""
+        if anonymise:
+            f["name"] = ANON_NAMES[real]
+    return out
+
+
+def real_name(name: str) -> str:
+    """Map tool_a → search_policy so one dispatch table serves every variant."""
+    back = {v: k for k, v in ANON_NAMES.items()}
+    back.update({v: k for k, v in VAGUE_NAMES.items()})
+    return back.get(name, name)
+
+
+# Six questions rather than four: with four tools and four obviously-separated
+# questions everything scores 4/4 and the experiment cannot discriminate.
+ROUTING_6 = [
+    ("Is $180,000 inside C-1041's limit?", "check_limits"),
+    ("What does our policy say about big trades?", "search_policy"),
+    ("When does AXR-7 settle?", "price_instrument"),
+    ("Who is C-2288?", "lookup_client"),
+    ("What is C-1041's tier?", "lookup_client"),
+    ("Is same-day settlement allowed?", "search_policy"),
+]
+
+# A description that points the WRONG way, while every NAME stays perfect.
+# Measured 5.0/6 (n=3) — exactly the cost of deleting both signals. Note what it
+# does: "their standing limit value" is TRUE of lookup_client, and it is the very
+# phrase that pulls the model there when asked whether an amount fits.
+MISLEADING = {
+    "check_limits": "Test ONE amount against a client's limit. Returns yes/no for that amount.",
+    "lookup_client": "Fetch a client's profile: name, tier, and their standing limit value.",
+}
 
 # ── profiles ─────────────────────────────────────────────────────────────────
 
@@ -238,8 +314,16 @@ ROUTING = [
     ("Who is C-2288?", "lookup_client"),
 ]
 
+
+def expected_for(schema, want: str) -> str:
+    """The vague set answers to different names for the same functions."""
+    names = {s["function"]["name"] for s in schema}
+    alias = VAGUE_NAMES.get(want)
+    return alias if alias in names else want
+
 __all__ = [
     "POLICIES", "CLIENTS", "INSTRUMENTS", "TOOLS", "call_tool",
     "SCHEMA", "VAGUE_SCHEMA", "SCHEMAS", "PROFILES", "TASK", "MUST_MENTION",
-    "score", "Probe", "react", "first_tool", "ROUTING",
+    "score", "Probe", "react", "first_tool", "ROUTING", "ROUTING_6", "expected_for",
+    "VAGUE_NAMES", "ANON_NAMES", "build_schema", "real_name", "MISLEADING",
 ]

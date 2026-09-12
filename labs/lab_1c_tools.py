@@ -3,20 +3,31 @@
 
 Modern AI Pro · Level 3 · AI Builder · Day 1
 
-A tool is not the function you wrote. To the model, the tool IS its description
-— that string is the entire interface, and it is the only thing the model reads
-when choosing. Same four functions, same code, two sets of descriptions:
+Everyone will tell you to write good tool descriptions. This lab measures
+whether that is true, which is a different and more useful activity.
 
-    vague   "Check limits."  — the way tools get written when nobody owns them
-    good    says what it is FOR and when to reach for it
+Two knobs — the NAME and the DESCRIPTION — turned independently over six
+questions, three runs per cell. Measured on the class model 2026-09-12, and it
+came back dead stable ([6,6,6], [5,5,5]) so you will reproduce it:
 
-Nothing else moves. Watch the routing accuracy move anyway. Most "the agent
-picked the wrong tool" bugs are interface failures, not reasoning failures —
-and they are fixed in the description, not in the prompt and not by swapping
-the model.
+                        good description    no description
+      real names              6.0/6              6.0/6
+      tool_a, tool_b …        6.0/6              5.0/6
+
+      real names + MISLEADING description        5.0/6
+
+The answer is not the one the advice implies. Name and description are REDUNDANT
+signals for the same thing — either alone routes perfectly, and only removing
+BOTH costs a question. Routing is robust.
+
+But a description that points the WRONG way costs exactly as much as removing
+both signals, and it does that while the names are still perfect. A wrong
+description OVERRIDES a right name.
+
+    You may be terse. You may not be wrong.
 
     python labs/lab_1c_tools.py           guided walkthrough in the terminal
-    python labs/lab_1c_tools.py --web     knobs in the browser
+    python labs/lab_1c_tools.py --web     turn the knobs yourself
 """
 
 from __future__ import annotations
@@ -28,100 +39,106 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from _kit import Stage, banner, client, meter, say, stages           # noqa: E402
-from _lab1 import (ROUTING, SCHEMA, SCHEMAS, VAGUE_SCHEMA,           # noqa: E402
-                   first_tool, react)
+from _lab1 import (ANON_NAMES, MISLEADING, PROFILES, ROUTING_6,      # noqa: E402
+                   build_schema, first_tool, react)
 from _web import (Knob, Panel, answer, note, port_from, section,     # noqa: E402
                   serve, step, table, wants_web)
 
 
-def route_all(cli, schema) -> tuple[int, list]:
-    rows, right = [], 0
-    for q, want in ROUTING:
+def score_schema(cli, schema, anonymised: bool) -> tuple[int, list]:
+    rows = []
+    right = 0
+    for q, want in ROUTING_6:
+        target = ANON_NAMES[want] if anonymised else want
         got = first_tool(cli, q, schema)
-        ok = got == want
+        ok = got == target
         right += ok
-        rows.append([("✓" if ok else "✗"), q, got, want])
+        rows.append([("✓" if ok else "✗"), q, got, target])
     return right, rows
 
 
-def schema_from(v: dict):
-    """The edited schema, if the student changed a description; else the preset."""
-    raw = (v.get("descriptions") or "").strip()
-    base = SCHEMAS.get(v.get("preset") or "good", SCHEMA)
-    if not raw:
-        return base
-    try:
-        edits = json.loads(raw)
-    except json.JSONDecodeError:
-        return base
-    out = []
-    for s in base:
-        s2 = json.loads(json.dumps(s))  # deep copy — never mutate the shared schema
-        name = s2["function"]["name"]
-        if isinstance(edits, dict) and name in edits:
-            s2["function"]["description"] = str(edits[name])
-        out.append(s2)
-    return out
-
-
-def _descriptions_json(schema) -> str:
-    return json.dumps({s["function"]["name"]: s["function"]["description"]
-                       for s in schema}, indent=2)
+def _truthy(v) -> bool:
+    return v in (True, "true", "on", "yes", 1, "1")
 
 
 # ── web ──────────────────────────────────────────────────────────────────────
 
 def run_web(cli, v: dict) -> str:
-    schema = schema_from(v)
-    right, rows = route_all(cli, schema)
-    body = section(
-        f"routing · {right}/{len(ROUTING)} correct",
-        table(["", "question", "it picked", "should be"],
-              [[m, q, got, want] for m, q, got, want in rows]))
+    anon = _truthy(v.get("anonymise"))
+    describe = not _truthy(v.get("strip"))
+    overrides = None
+    raw = (v.get("descriptions") or "").strip()
+    if raw == "__misleading__":
+        overrides = MISLEADING
+    elif raw:
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                overrides = parsed
+        except json.JSONDecodeError:
+            pass
 
-    if v.get("compare") in (True, "true", "on"):
-        vr, _ = route_all(cli, VAGUE_SCHEMA)
-        gr, _ = route_all(cli, SCHEMA)
-        body += section("vague vs written as an interface", table(
-            ["descriptions", "routed correctly"],
-            [["vague", f"{vr}/{len(ROUTING)}"], ["interface", f"{gr}/{len(ROUTING)}"]]))
+    schema = build_schema(anonymise=anon, describe=describe, overrides=overrides)
+    right, rows = score_schema(cli, schema, anon)
+
+    label = ("tool_a…" if anon else "real names") + " + " + ("no description" if not describe
+                                                             else "misleading description" if raw == "__misleading__"
+                                                             else "description")
+    body = section(f"routing · {label} · {right}/{len(ROUTING_6)} correct",
+                   table(["", "question", "it picked", "should be"], rows))
+
+    if _truthy(v.get("grid")):
+        cells = []
+        for an in (False, True):
+            for de in (True, False):
+                r, _ = score_schema(cli, build_schema(anonymise=an, describe=de), an)
+                cells.append([("tool_a, tool_b …" if an else "real names"),
+                              ("description" if de else "no description"),
+                              f"{r}/{len(ROUTING_6)}"])
+        body += section("the 2×2 — which knob carries the signal?",
+                        table(["names", "descriptions", "routed correctly"], cells))
 
     if v.get("task"):
         steps: list[str] = []
-        out = react(cli, v["task"], profile=v.get("profile") or
-                    "You are an operations agent at Aurex Financial. Use tools to "
-                    "establish facts before answering.",
-                    schema=schema, budget=6,
+        out = react(cli, v["task"], profile=PROFILES["operations"], schema=schema, budget=6,
                     on_step=lambda k, lab, det: steps.append(step(lab, det, k)))
-        body += section("a full run on these descriptions", "".join(steps) + answer(out))
+        body += section("a full run on this variant", "".join(steps) + answer(out))
 
     body += section("read this", note(
-        "The code behind these four tools never changed — not one line. Only the "
-        "strings the model reads. If two descriptions could both plausibly answer a "
-        "question, the model is guessing, and you wrote the coin it flips."))
+        "The functions behind these tools never change — not one line, in any variant. "
+        "Only the strings the model reads. Over three runs a cell: either signal alone "
+        "routes 6/6, and only removing BOTH drops it to 5/6. Routing is robust. But the "
+        "misleading preset — perfect names, descriptions pointing the wrong way — also "
+        "scores 5/6, so a wrong description costs as much as having no interface at all. "
+        "You may be terse. You may not be wrong. A single run of any cell is noisy; run "
+        "it a few times before you believe a one-question difference."))
     return body
 
 
 def web(cli, port: int) -> None:
     serve(Panel(
         title="Tools — what it can tell apart",
-        subtitle="Four functions, two sets of descriptions. The code is identical. "
-                 "Only the strings the model reads are different.",
-        intro="Run <b>vague</b> first and count the misroutes. Switch to <b>good</b> and "
-              "run again. Then edit the JSON directly — try making two descriptions "
-              "overlap on purpose (give <code>check_limits</code> and "
-              "<code>lookup_client</code> both the word 'limit') and watch the routing "
-              "collapse. That is the most common real-world tool bug, reproduced on demand.",
+        subtitle="Two knobs, turned independently: the tool's NAME and its DESCRIPTION. "
+                 "Same six questions, same four functions underneath. Which one is "
+                 "actually carrying the routing?",
+        intro="Tick <b>run the 2×2</b> first — that is the whole experiment in one table. "
+              "Write down your prediction before you press it. Then load the "
+              "<b>__misleading__</b> preset, which keeps every tool's perfect name and "
+              "only points its description the wrong way. One run per cell is noisy; the "
+              "published numbers are three runs each.",
         knobs=[
-            Knob("preset", "Description set", "select", default="good",
-                 options=[("good", "good — written as an interface"),
-                          ("vague", "vague — the way they usually get written")]),
-            Knob("descriptions", "Edit the descriptions (JSON — blank uses the preset)",
+            Knob("grid", "Run the 2×2 grid", "select", default="true",
+                 options=[("true", "yes — all four cells (8 calls)"), ("false", "no — just this one")]),
+            Knob("anonymise", "Tool names", "select", default="false",
+                 options=[("false", "real names — search_policy, check_limits…"),
+                          ("true", "anonymous — tool_a, tool_b, tool_c, tool_d")]),
+            Knob("strip", "Descriptions", "select", default="false",
+                 options=[("false", "keep them"), ("true", "strip them entirely")]),
+            Knob("descriptions", "Override descriptions (JSON, or the word __misleading__)",
                  "textarea", default="",
-                 help="Paste {\"tool_name\": \"new description\"} to override any of them."),
-            Knob("task", "Optional: run a full task on these tools", "text", default=""),
-            Knob("compare", "Also score the other set", "select", default="false",
-                 options=[("false", "no"), ("true", "yes — score both")]),
+                 help='Try __misleading__ for the measured 5.0/6 case, or paste '
+                      '{"check_limits": "…"} to write your own.'),
+            Knob("task", "Optional: run a full task on this variant", "text", default=""),
         ],
         run=run_web, button="Score the routing",
     ), cli, port=port)
@@ -129,31 +146,33 @@ def web(cli, port: int) -> None:
 
 # ── cli ──────────────────────────────────────────────────────────────────────
 
-def stage_routing(cli):
-    say("Identical tools, identical code, identical profile. Only the DESCRIPTIONS "
-        "differ.\n")
-    for label, schema in (("vague", VAGUE_SCHEMA), ("written as an interface", SCHEMA)):
-        say(f"[bold yellow]── {label} ──[/bold yellow]")
-        right, rows = route_all(cli, schema)
-        for mark, q, got, want in rows:
-            colour = "green" if mark == "✓" else "red"
-            say(f"  [{colour}]{mark}[/{colour}] {q[:50]:<52} → [bold]{got}[/bold]"
-                + ("" if mark == "✓" else f" [dim](wanted {want})[/dim]"))
-        say(f"  [bold]{right}/{len(ROUTING)} routed correctly[/bold]\n")
-
-
-def stage_overlap(cli):
-    say("Now the bug you will actually ship: two tools whose descriptions overlap.\n")
-    collide = json.loads(json.dumps(SCHEMA))
-    for s in collide:
-        if s["function"]["name"] in ("check_limits", "lookup_client"):
-            s["function"]["description"] = "Look up a client's limit."
-    right, rows = route_all(cli, collide)
+def _show(cli, schema, anon, label):
+    right, rows = score_schema(cli, schema, anon)
+    say(f"[bold yellow]── {label} ──[/bold yellow]")
     for mark, q, got, want in rows:
         colour = "green" if mark == "✓" else "red"
-        say(f"  [{colour}]{mark}[/{colour}] {q[:50]:<52} → [bold]{got}[/bold]"
+        say(f"  [{colour}]{mark}[/{colour}] {q[:44]:<46} → [bold]{got}[/bold]"
             + ("" if mark == "✓" else f" [dim](wanted {want})[/dim]"))
-    say(f"  [bold]{right}/{len(ROUTING)} routed correctly[/bold]\n")
+    say(f"  [bold]{right}/{len(ROUTING_6)}[/bold]\n")
+    return right
+
+
+def stage_grid(cli):
+    say("Two knobs, turned independently. Six questions each.\n")
+    cells = {}
+    for anon in (False, True):
+        for desc in (True, False):
+            label = ("tool_a…" if anon else "real names") + " + " + ("description" if desc else "NO description")
+            cells[(anon, desc)] = _show(cli, build_schema(anonymise=anon, describe=desc), anon, label)
+    say("[bold]                      description   no description[/bold]")
+    say(f"  real names          {cells[(False, True)]:>9}/6   {cells[(False, False)]:>9}/6")
+    say(f"  tool_a, tool_b …    {cells[(True, True)]:>9}/6   {cells[(True, False)]:>9}/6")
+
+
+def stage_misleading(cli):
+    say("Now a description that points the wrong way — the case nobody expects.\n")
+    _show(cli, build_schema(overrides=MISLEADING), False, "misleading descriptions")
+    say("[dim]Compare that against the no-description row above.[/dim]")
 
 
 if __name__ == "__main__":
@@ -162,26 +181,32 @@ if __name__ == "__main__":
         web(cli, port_from(default=7862))
         sys.exit(0)
     banner("Level 3 · AI Builder · Day 1", "Lab 1c · Tools — what it can tell apart")
-    say("[dim]Tip: --web lets you edit the descriptions live.[/dim]\n")
+    say("[dim]Tip: --web lets you turn both knobs and edit descriptions live.[/dim]\n")
     stages(cli, [
-        Stage("The description IS the interface",
-              why="To the model, a tool is its name, its description and its parameter "
-                  "schema. That is all it gets. Here are the same four functions twice: "
-                  "once described the way tools get written when nobody owns them, once "
-                  "written as an interface that says what each is FOR.",
-              fn=stage_routing,
-              logic="The code never changed. The routing did. Most 'the agent picked the "
-                    "wrong tool' bugs are not reasoning failures — they are interface "
-                    "failures, fixed in the description, not in the prompt and not by "
-                    "swapping the model."),
-        Stage("Overlap is the same bug",
-              why="Two tools that could both plausibly answer the same question is the "
-                  "most common tool bug in production, and it never looks like a bug — "
-                  "it looks like the model being unreliable.",
-              fn=stage_overlap,
-              logic="Give two tools the same description and the model has no basis to "
-                    "choose; it picks one, and it will not always pick the same one. "
-                    "Before you conclude the model is unreliable, read your tool list as "
-                    "if you were the one being asked to choose from it."),
+        Stage("Which knob carries the routing?",
+              why="Everyone says write good tool descriptions. Measure it instead. Two "
+                  "knobs — the NAME and the DESCRIPTION — turned independently over the "
+                  "same six questions, with the same four functions underneath. Before "
+                  "it runs, write down which you think matters more.",
+              fn=stage_grid,
+              logic="Not the answer the advice implies. The name and the description are "
+                    "REDUNDANT — either one alone routes everything, and only removing "
+                    "BOTH costs a question. Routing is more robust than tool-writing "
+                    "guides suggest, and polishing a description that already sits under "
+                    "a clear name buys you nothing measurable. Which makes the next "
+                    "stage the one that matters."),
+        Stage("Worse than nothing",
+              why="If a missing description costs you one question, what does a WRONG "
+                  "one cost? Here lookup_client is described as carrying 'their standing "
+                  "limit value' — true, and exactly the phrase that makes the model reach "
+                  "for it when asked whether an amount fits.",
+              fn=stage_misleading,
+              logic="It cost exactly as much as deleting BOTH signals — and it did that "
+                    "while every tool still had a perfect name. A wrong description "
+                    "overrides a right name; absence does not. So the rule is not 'write "
+                    "rich descriptions', it is: you may be terse, you may not be wrong. "
+                    "The fix is never in the prompt and never in a bigger model — read "
+                    "your tool list as if you were the one being asked to choose from it, "
+                    "and delete every phrase that could send you to the wrong tool."),
     ])
     meter.show()

@@ -12,8 +12,19 @@ ReWOO. It is which shape of problem each planner suits, and what each costs:
     ReWOO              plan with #E placeholders, execute with the model OUT of the
                        loop, solve once at the end. Fewest calls. Blind in the same way.
 
-The task has a surprise in it — the honest answer is NO, on settlement — which
-is exactly the condition under which an adaptive planner earns its cost.
+Measured on the class model, 2026-09-12:
+
+    planner            LLM calls   tokens   facts found
+    ReAct                      3     1839         4 / 4
+    Plan-and-Execute           2      867         3 / 4
+    ReWOO                      2      812         4 / 4
+
+Read that before you assume the adaptive planner wins. ReWOO matched ReAct's
+answer on 44% of the tokens. Plan-and-Execute lost a fact for a specific and
+instructive reason: its plan is fixed before anything runs, so it could not feed
+the notional it had just computed into the limit check. ReWOO plans blind too —
+but its #E placeholders let one step consume another's result, which is the
+entire difference between the two, and it is worth one whole fact here.
 
     python labs/lab_1d_planning.py           guided walkthrough in the terminal
     python labs/lab_1d_planning.py --web     knobs in the browser
@@ -142,12 +153,15 @@ def run_web(cli, v: dict) -> str:
             body += note(f"{r['name']} missed: {', '.join(r['missed'])}", "warn")
 
     body += section("read this", note(
-        "Read the table as a trade, not a ranking. The cheap planners are right when the "
-        "route is knowable up front. ReAct earns its cost exactly when a step can "
-        "surprise you — and this task has a surprise in it, because the honest answer is "
-        "NO on settlement. The facts column is what makes this a measurement rather than "
-        "an opinion: those four were frozen before any planner ran. If a cheap planner "
-        "scores the same, take the cheap planner."))
+        "Read the table as a trade, not a ranking — and notice it may not go the way "
+        "these planners' reputations suggest. In our run ReWOO matched ReAct at 4/4 for "
+        "44% of the tokens, and Plan-and-Execute lost a fact for a precise reason: its "
+        "plan is fixed before anything runs, so it could not feed the notional it had "
+        "just computed into the limit check. ReWOO plans blind too, but its #E "
+        "placeholders let one step consume another's result — that is the whole "
+        "difference, and here it is worth one fact. The facts column makes this a "
+        "measurement rather than an opinion: those four were frozen before any planner "
+        "ran. If a cheap planner scores the same, take the cheap planner."))
     return body
 
 
@@ -215,12 +229,17 @@ if __name__ == "__main__":
                   "calls of the three, and blind to surprise in the same way. Same task, "
                   "same tools; only the architecture moves.",
               fn=stage_bakeoff,
-              logic="Read the table as a trade, not a ranking. The cheapest planner is "
-                    "right when the route is knowable up front; ReAct earns its cost "
-                    "exactly when a step can surprise you — and this task has a surprise "
-                    "in it, because the honest answer is NO on settlement. The facts "
-                    "column is what makes this a measurement rather than an opinion: "
-                    "those four were frozen before any planner ran. If a cheap planner "
-                    "scores the same, take the cheap planner."),
+              logic="Read the table as a trade, not a ranking — and notice the trade "
+                    "did not go the way the reputation of these planners suggests. ReAct "
+                    "thought between every step and bought nothing with it: ReWOO tied it "
+                    "at 4/4 for well under half the tokens. Plan-and-Execute lost a fact "
+                    "for a precise reason worth more than the score — its plan is fixed "
+                    "before anything runs, so it could not feed the notional it had just "
+                    "computed into the limit check. ReWOO plans blind too, but its #E "
+                    "placeholders let one step consume another's result. That is the "
+                    "whole difference between them, and here it is worth one fact. The "
+                    "facts column is what makes this a measurement rather than an "
+                    "opinion: those four were frozen before any planner ran. If a cheap "
+                    "planner scores the same, take the cheap planner."),
     ])
     meter.show()

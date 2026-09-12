@@ -3,9 +3,9 @@
 
 Modern AI Pro · Level 3 · AI Builder · Day 1
 
-Turn 3 asks about "them" and "same-day". Nothing in that sentence names a
-client. Whether the agent can answer it is not a model capability — it is a
-policy you chose, and each policy pays a different bill:
+Turn 3 asks whether "they" could afford 1,800 units. Nothing in that sentence
+names a client. Whether the agent can answer it is not a model capability — it
+is a policy you chose, and each policy pays a different bill:
 
     none     cheap, and turn 3 is unanswerable
     window   accurate, and grows without limit
@@ -31,10 +31,14 @@ from _lab1 import PROFILES, Probe, react                             # noqa: E40
 from _web import (Knob, Panel, answer, note, port_from, section,     # noqa: E402
                   serve, step, table, wants_web)
 
+# Turn 3 must be UNANSWERABLE without turn 1 — otherwise a stateless agent
+# answers it from the question alone and the whole comparison scores a pass.
+# (First draft said "can they settle AXR-7 same-day?", which names the instrument
+#  outright: stateless answered it correctly and the lesson evaporated.)
 TURNS = [
     "I'm looking at client C-1041 today.",
     "What's their limit?",
-    "And can they settle AXR-7 same-day?",
+    "Could they afford 1,800 units of AXR-7?",
 ]
 
 POLICIES_HELP = {
@@ -97,9 +101,15 @@ def converse(cli, policy: str, on_turn) -> dict:
             "last": history[-1]["content"] if history else ""}
 
 
-# Turn 3 is answered correctly only if the agent still knows who "they" are.
 def resolved(last: str) -> bool:
-    return "t+2" in last.lower() or "cannot" in last.lower() or "no" in last.lower()[:24]
+    """Turn 3 is answered only if the agent still knows who 'they' are.
+
+    Scored on the CLIENT's number, not on a yes/no — a stateless agent can emit a
+    confident yes about nobody in particular, and that must not count as a pass.
+    $177,156 against the $250,000 limit is the answer; both numbers require C-1041.
+    """
+    t = (last or "").lower()
+    return ("250" in t) or ("177" in t)
 
 
 # ── web ──────────────────────────────────────────────────────────────────────
